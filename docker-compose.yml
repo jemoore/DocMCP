@@ -1,0 +1,16 @@
+services:
+  docmcp:
+    build: .
+    ports:
+      - "8808:8808"
+    volumes:
+      - docmcp-index:/data/index
+      # Mount your document directories below (read-only recommended):
+      - /mnt/data/Documents/Books/HumbleBundle/code-like-a-pro:/data/docs/documents:ro
+      # - /path/to/your/notes:/data/docs/notes:ro
+    environment:
+      DOCMCP_LOG_LEVEL: INFO
+    restart: unless-stopped
+
+volumes:
+  docmcp-index:

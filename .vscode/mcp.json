@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "docmcp": {
+      "type": "http",
+      "url": "http://localhost:8808/mcp"
+    }
+  }
+}
