@@ -5,7 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from docmcp.parsers import html, markdown, pdf
+
+def read_text(path: Path) -> str:
+    """Read a text file, tolerating non-UTF-8 content.
+
+    Tries UTF-8 (the common case) and falls back to a lenient decode so a
+    single oddly-encoded file does not abort indexing.
+    """
+    data = path.read_bytes()
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.decode("utf-8", errors="replace")
+
+
+from docmcp.parsers import html, markdown, pdf  # noqa: E402  (avoid circular import)
 
 # Map file extensions to their parser functions
 _PARSERS: dict[str, Callable[[Path], list[tuple[str, dict]]]] = {

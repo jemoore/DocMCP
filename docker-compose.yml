@@ -10,6 +10,9 @@ services:
       # - /path/to/your/notes:/data/docs/notes:ro
     environment:
       DOCMCP_LOG_LEVEL: INFO
+      # Set a token to require `Authorization: Bearer <token>` on all requests.
+      # Leave unset only if the port is confined to a trusted network.
+      # DOCMCP_AUTH_TOKEN: change-me
     restart: unless-stopped
 
 volumes:

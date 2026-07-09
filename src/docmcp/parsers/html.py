@@ -4,10 +4,12 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+from docmcp.parsers import read_text
+
 
 def extract_text(path: Path) -> list[tuple[str, dict]]:
     """Extract text from an HTML file, stripping scripts and styles."""
-    raw = path.read_text(encoding="utf-8")
+    raw = read_text(path)
     soup = BeautifulSoup(raw, "html.parser")
 
     # Remove script and style elements

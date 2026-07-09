@@ -51,8 +51,9 @@ All settings are via environment variables:
 | `DOCMCP_INDEX_DIR` | `/data/index` | Persistent index storage |
 | `DOCMCP_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformer model |
 | `DOCMCP_CHUNK_SIZE` | `1000` | Chunk size in characters |
-| `DOCMCP_CHUNK_OVERLAP` | `200` | Chunk overlap in characters |
+| `DOCMCP_CHUNK_OVERLAP` | `200` | Chunk overlap in characters (must be < chunk size) |
 | `DOCMCP_LOG_LEVEL` | `INFO` | Logging level |
+| `DOCMCP_AUTH_TOKEN` | _(unset)_ | If set, require `Authorization: Bearer <token>` on all requests. When unset the server is unauthenticated — only expose it on a trusted network. |
 
 ## Development
 

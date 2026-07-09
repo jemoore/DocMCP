@@ -18,11 +18,14 @@ class Config:
     chunk_size: int = 1000
     chunk_overlap: int = 200
     log_level: str = "INFO"
+    auth_token: str | None = None
 
     @classmethod
     def from_env(cls) -> Config:
         doc_dirs_raw = os.environ.get("DOCMCP_DOC_DIRS", "/data/docs")
         doc_dirs = [Path(d.strip()) for d in doc_dirs_raw.split(",") if d.strip()]
+
+        auth_token = os.environ.get("DOCMCP_AUTH_TOKEN", "").strip() or None
 
         config = cls(
             host=os.environ.get("DOCMCP_HOST", "0.0.0.0"),
@@ -33,7 +36,14 @@ class Config:
             chunk_size=int(os.environ.get("DOCMCP_CHUNK_SIZE", "1000")),
             chunk_overlap=int(os.environ.get("DOCMCP_CHUNK_OVERLAP", "200")),
             log_level=os.environ.get("DOCMCP_LOG_LEVEL", "INFO"),
+            auth_token=auth_token,
         )
+
+        if config.chunk_overlap >= config.chunk_size:
+            raise ValueError(
+                "DOCMCP_CHUNK_OVERLAP must be smaller than DOCMCP_CHUNK_SIZE "
+                f"(got overlap={config.chunk_overlap}, size={config.chunk_size})"
+            )
 
         for d in config.doc_dirs:
             if not d.exists():

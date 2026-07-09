@@ -6,9 +6,36 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from docmcp.parsers import SUPPORTED_EXTENSIONS, parse_file
+from docmcp.parsers import SUPPORTED_EXTENSIONS, parse_file, read_text
 from docmcp.parsers.html import extract_text as html_extract
 from docmcp.parsers.markdown import extract_text as md_extract
+
+
+class TestReadText:
+    def test_reads_utf8(self, tmp_path: Path) -> None:
+        f = tmp_path / "a.txt"
+        f.write_text("héllo wörld", encoding="utf-8")
+        assert read_text(f) == "héllo wörld"
+
+    def test_falls_back_on_invalid_utf8(self, tmp_path: Path) -> None:
+        f = tmp_path / "b.txt"
+        f.write_bytes(b"caf\xe9")  # latin-1 'é', invalid as UTF-8
+        # Must not raise; the undecodable byte is replaced.
+        assert read_text(f).startswith("caf")
+
+
+class TestParsersHandleNonUtf8:
+    def test_html_non_utf8_does_not_crash(self, tmp_path: Path) -> None:
+        f = tmp_path / "x.html"
+        f.write_bytes(b"<p>caf\xe9</p>")
+        result = html_extract(f)
+        assert result and "caf" in result[0][0]
+
+    def test_markdown_non_utf8_does_not_crash(self, tmp_path: Path) -> None:
+        f = tmp_path / "x.md"
+        f.write_bytes(b"# t\xe9st heading")
+        result = md_extract(f)
+        assert result and "st heading" in result[0][0]
 
 
 class TestMarkdownParser:
