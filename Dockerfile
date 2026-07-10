@@ -18,7 +18,11 @@ COPY src/ src/
 RUN uv sync --no-dev
 
 # Create data directories
-RUN mkdir -p /data/docs /data/index
+RUN mkdir -p /data/docs /data/index /data/hf-cache
+
+# Keep the sentence-transformers model download in a mountable location so it
+# survives container recreation (see the docmcp-hf-cache volume in compose).
+ENV HF_HOME=/data/hf-cache
 
 EXPOSE 8808
 

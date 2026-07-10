@@ -6,17 +6,23 @@ from docmcp.search import normalize_score, search
 
 
 class TestNormalizeScore:
+    """Cosine distance is bounded to [0, 2]: 0 = identical, 1 = orthogonal,
+    2 = opposite."""
+
     def test_zero_distance_gives_one(self) -> None:
         assert normalize_score(0.0) == 1.0
 
-    def test_large_distance_gives_small_score(self) -> None:
-        score = normalize_score(100.0)
-        assert 0.0 < score < 0.02
+    def test_max_distance_gives_zero(self) -> None:
+        assert normalize_score(2.0) == 0.0
+
+    def test_orthogonal_gives_half(self) -> None:
+        assert normalize_score(1.0) == 0.5
 
     def test_score_always_between_zero_and_one(self) -> None:
-        for d in [0.0, 0.1, 0.5, 1.0, 5.0, 100.0]:
+        # Includes out-of-range distances (float noise), which must clamp.
+        for d in [-0.001, 0.0, 0.1, 0.5, 1.0, 1.9, 2.0, 2.001]:
             s = normalize_score(d)
-            assert 0.0 < s <= 1.0
+            assert 0.0 <= s <= 1.0
 
 
 class TestSearch:
@@ -71,7 +77,7 @@ class TestSearch:
 
         search(mock_collection, "test", limit=999)
         mock_collection.query.assert_called_once_with(
-            query_texts=["test"], n_results=50
+            query_texts=["test"], n_results=50, where=None
         )
 
     def test_page_number_negative_one_becomes_none(self) -> None:

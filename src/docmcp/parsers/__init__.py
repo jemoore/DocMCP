@@ -19,15 +19,17 @@ def read_text(path: Path) -> str:
         return data.decode("utf-8", errors="replace")
 
 
-from docmcp.parsers import html, markdown, pdf  # noqa: E402  (avoid circular import)
+from docmcp.parsers import html, markdown, pdf, text  # noqa: E402  (avoid circular import)
 
 # Map file extensions to their parser functions
 _PARSERS: dict[str, Callable[[Path], list[tuple[str, dict]]]] = {
     ".pdf": pdf.extract_text,
+    ".epub": pdf.extract_text,  # pymupdf reads EPUB natively
     ".md": markdown.extract_text,
     ".markdown": markdown.extract_text,
     ".html": html.extract_text,
     ".htm": html.extract_text,
+    ".txt": text.extract_text,
 }
 
 SUPPORTED_EXTENSIONS = set(_PARSERS.keys())

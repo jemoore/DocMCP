@@ -114,19 +114,75 @@ class TestPdfParser:
         assert meta["page_number"] == 1
 
 
+class TestTextParser:
+    def test_extracts_plain_text(self, tmp_path: Path) -> None:
+        from docmcp.parsers.text import extract_text as txt_extract
+
+        f = tmp_path / "notes.txt"
+        f.write_text("Just some plain text notes.\nSecond line.")
+        result = txt_extract(f)
+        assert len(result) == 1
+        text, metadata = result[0]
+        assert "plain text notes" in text
+        assert "Second line" in text
+        assert metadata == {}
+
+    def test_empty_file_returns_empty(self, tmp_path: Path) -> None:
+        from docmcp.parsers.text import extract_text as txt_extract
+
+        f = tmp_path / "empty.txt"
+        f.write_text("   \n  ")
+        assert txt_extract(f) == []
+
+
+class TestPdfFurnitureStripping:
+    def test_repeating_headers_and_footers_removed(self) -> None:
+        from docmcp.parsers.pdf import _strip_repeating_furniture
+
+        pages = [
+            f"My Book Title\nUnique paragraph for page {n}.\nMore body text.\nPage {n}"
+            for n in range(1, 8)
+        ]
+        stripped = _strip_repeating_furniture(pages)
+        for n, page in enumerate(stripped, start=1):
+            assert "My Book Title" not in page
+            assert f"Page {n}" not in page
+            assert f"Unique paragraph for page {n}." in page
+            assert "More body text." in page
+
+    def test_short_documents_left_untouched(self) -> None:
+        from docmcp.parsers.pdf import _strip_repeating_furniture
+
+        pages = [f"Header\nBody {n}\nFooter" for n in range(3)]
+        assert _strip_repeating_furniture(pages) == pages
+
+    def test_non_repeating_lines_kept(self) -> None:
+        from docmcp.parsers.pdf import _strip_repeating_furniture
+
+        # First/last lines differ beyond digits, so nothing repeats enough to
+        # be treated as a header or footer.
+        pages = [
+            f"{'abcdefg'[n]} unique opener\nBody text here.\nender {'abcdefg'[n]} unique"
+            for n in range(7)
+        ]
+        assert _strip_repeating_furniture(pages) == pages
+
+
 class TestParseFileDispatch:
     def test_supported_extensions(self) -> None:
         assert ".pdf" in SUPPORTED_EXTENSIONS
+        assert ".epub" in SUPPORTED_EXTENSIONS
         assert ".md" in SUPPORTED_EXTENSIONS
         assert ".markdown" in SUPPORTED_EXTENSIONS
         assert ".html" in SUPPORTED_EXTENSIONS
         assert ".htm" in SUPPORTED_EXTENSIONS
+        assert ".txt" in SUPPORTED_EXTENSIONS
 
     def test_unsupported_extension_raises(self, tmp_path: Path) -> None:
-        txt_file = tmp_path / "test.txt"
-        txt_file.write_text("hello")
+        docx_file = tmp_path / "test.docx"
+        docx_file.write_text("hello")
         with pytest.raises(ValueError, match="Unsupported file extension"):
-            parse_file(txt_file)
+            parse_file(docx_file)
 
     def test_dispatches_markdown(self, tmp_path: Path) -> None:
         md_file = tmp_path / "test.md"

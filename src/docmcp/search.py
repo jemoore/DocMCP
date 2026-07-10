@@ -4,12 +4,16 @@ from docmcp.models import SearchResult, SearchResultMetadata
 
 
 def normalize_score(distance: float) -> float:
-    """Convert ChromaDB distance to a 0-1 relevance score (higher is better)."""
-    return 1.0 / (1.0 + distance)
+    """Convert a cosine distance (0..2) to a 0-1 relevance score (higher is
+    better). The collection is built with hnsw:space=cosine to match."""
+    return max(0.0, min(1.0, 1.0 - distance / 2.0))
 
 
-def search(collection, query: str, limit: int = 10) -> list[SearchResult]:
-    """Perform semantic search against a ChromaDB collection."""
+def search(
+    collection, query: str, limit: int = 10, where: dict | None = None
+) -> list[SearchResult]:
+    """Perform semantic search against a ChromaDB collection, optionally
+    restricted by a Chroma `where` metadata filter."""
     limit = max(1, min(limit, 50))
 
     count = collection.count()
@@ -21,6 +25,7 @@ def search(collection, query: str, limit: int = 10) -> list[SearchResult]:
     results = collection.query(
         query_texts=[query],
         n_results=n_results,
+        where=where,
     )
 
     search_results: list[SearchResult] = []

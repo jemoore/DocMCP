@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 
 from docmcp.config import Config
-from docmcp.indexer import Indexer, chunk_text, compute_hash, scan_documents
+from docmcp.indexer import (
+    Indexer,
+    chunk_segments,
+    chunk_text,
+    compute_hash,
+    merge_overlapping_texts,
+    scan_documents,
+)
 
 
 class TestChunkText:
@@ -65,12 +72,67 @@ class TestChunkText:
         assert sum(len(c) for c in with_overlap) > sum(len(c) for c in without)
 
 
+class TestChunkSegments:
+    def test_single_segment_no_pages(self) -> None:
+        segments = [("hello world content", {})]
+        result = chunk_segments(segments, chunk_size=1000, overlap=0)
+        assert result == [("hello world content", None)]
+
+    def test_chunks_span_page_boundaries(self) -> None:
+        # Two short pages must merge into one chunk instead of one chunk per
+        # page — previously each page was chunked in isolation.
+        segments = [
+            ("first page text.", {"page_number": 1}),
+            ("second page text.", {"page_number": 2}),
+        ]
+        result = chunk_segments(segments, chunk_size=1000, overlap=0)
+        assert len(result) == 1
+        chunk, page = result[0]
+        assert "first page text." in chunk
+        assert "second page text." in chunk
+        assert page == 1  # page of the chunk's first character
+
+    def test_chunk_page_assignment_follows_start_position(self) -> None:
+        page1 = "alpha " * 30  # 180 chars
+        page2 = "omega " * 30
+        segments = [
+            (page1.strip(), {"page_number": 1}),
+            (page2.strip(), {"page_number": 2}),
+        ]
+        result = chunk_segments(segments, chunk_size=200, overlap=0)
+        assert len(result) >= 2
+        assert result[0][1] == 1
+        assert result[-1][1] == 2
+        # All text is represented across the chunks.
+        combined = " ".join(chunk for chunk, _ in result)
+        assert "alpha" in combined and "omega" in combined
+
+
+class TestMergeOverlappingTexts:
+    def test_removes_carried_overlap(self) -> None:
+        # Second chunk starts with the tail of the first (the chunker's
+        # overlap); the merge must not duplicate it.
+        merged = merge_overlapping_texts(
+            ["one two three four", "three four five six"]
+        )
+        assert merged == "one two three four five six"
+
+    def test_no_overlap_joins_with_newline(self) -> None:
+        merged = merge_overlapping_texts(["first part", "second part"])
+        assert merged == "first part\nsecond part"
+
+    def test_single_text_unchanged(self) -> None:
+        assert merge_overlapping_texts(["only text"]) == "only text"
+
+
 class TestScanDocuments:
     def test_finds_supported_files(self, tmp_path: Path) -> None:
         (tmp_path / "doc.pdf").touch()
         (tmp_path / "readme.md").touch()
         (tmp_path / "page.html").touch()
-        (tmp_path / "data.txt").touch()  # should be excluded
+        (tmp_path / "data.txt").touch()
+        (tmp_path / "book.epub").touch()
+        (tmp_path / "report.docx").touch()  # should be excluded
         (tmp_path / "sub").mkdir()
         (tmp_path / "sub" / "nested.htm").touch()
 
@@ -80,7 +142,9 @@ class TestScanDocuments:
         assert "readme.md" in names
         assert "page.html" in names
         assert "nested.htm" in names
-        assert "data.txt" not in names
+        assert "data.txt" in names
+        assert "book.epub" in names
+        assert "report.docx" not in names
 
     def test_nonexistent_dir_returns_empty(self, tmp_path: Path) -> None:
         result = scan_documents([tmp_path / "nope"])

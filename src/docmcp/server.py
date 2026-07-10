@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
@@ -51,9 +50,7 @@ def _build_auth():
 async def lifespan(app):
     """Start background incremental indexing on server startup."""
     logger.info("DocMCP starting up — launching background indexing...")
-    indexer = get_indexer()
-    thread = threading.Thread(target=indexer.index_incremental, daemon=True)
-    thread.start()
+    get_indexer().start_reindex(full=False)
     yield
     logger.info("DocMCP shutting down.")
 
@@ -62,31 +59,83 @@ mcp = FastMCP("DocMCP", lifespan=lifespan, auth=_build_auth())
 
 
 @mcp.tool
-def search_documents(query: str, limit: int = 10) -> list[dict]:
-    """Perform semantic search across all indexed documents.
+def search_documents(
+    query: str, limit: int = 10, document_filter: str = ""
+) -> list[dict]:
+    """Perform semantic search across indexed documents.
 
     Args:
         query: Natural-language search query.
         limit: Max results to return (default: 10, max: 50).
+        document_filter: Optional glob pattern to restrict the search to
+            matching document names (e.g. 'python*.pdf' or a full document
+            name from list_documents). Empty string searches everything.
 
     Returns:
-        A list of search results with document name, matching text, score, and metadata.
+        A list of search results with document name, matching text, score, and
+        metadata (source path, page number, chunk index). Pass a result's
+        document name and chunk index to get_context for the surrounding text.
     """
-    results = get_indexer().search(query, limit)
+    results = get_indexer().search(query, limit, document_filter or None)
     return [asdict(r) for r in results]
 
 
 @mcp.tool
-def get_document(document_name: str) -> dict:
-    """Retrieve the full text content of a specific indexed document.
+def get_context(
+    document_name: str, chunk_index: int, before: int = 2, after: int = 2
+) -> dict:
+    """Fetch the text surrounding a search hit for fuller context.
+
+    Search results are short chunks; this returns the passage around one —
+    the chunks from `chunk_index - before` through `chunk_index + after`,
+    merged into one continuous text with the chunk overlap removed.
+
+    Args:
+        document_name: Document name from a search result.
+        chunk_index: Chunk index from a search result's metadata.
+        before: Chunks of preceding context to include (default 2).
+        after: Chunks of following context to include (default 2).
+
+    Returns:
+        The merged passage plus the chunk and page range it covers.
+    """
+    ctx = get_indexer().get_context(document_name, chunk_index, before, after)
+    return asdict(ctx)
+
+
+@mcp.tool
+def get_document(
+    document_name: str,
+    page_start: int | None = None,
+    page_end: int | None = None,
+    offset: int = 0,
+    max_chars: int = 50000,
+) -> dict:
+    """Retrieve the text content of a specific indexed document.
+
+    Whole books can be megabytes of text, so results are windowed. Use
+    page_start/page_end to select a page range (PDFs only), and offset with
+    the returned total_chars to page through longer texts. When the result is
+    cut short, `truncated` is true.
 
     Args:
         document_name: Filename or relative path of the document.
+        page_start: First page to include (PDFs only, 1-based, inclusive).
+        page_end: Last page to include (PDFs only, inclusive).
+        offset: Character offset into the selected text to start from.
+        max_chars: Max characters to return (default 50000; <= 0 for no limit).
 
     Returns:
-        The full extracted text content plus metadata.
+        The extracted text slice plus metadata (total_chars, offset, truncated,
+        page_count, size_bytes, last_modified).
     """
-    doc = get_indexer().get_document(document_name)
+    doc = get_indexer().get_document(
+        document_name,
+        page_start=page_start,
+        page_end=page_end,
+        offset=offset,
+        max_chars=max_chars,
+    )
     return asdict(doc)
 
 
@@ -109,18 +158,28 @@ def list_documents(filter: str = "") -> list[dict]:
 def reindex(full: bool = False) -> dict:
     """Trigger re-indexing of the document corpus.
 
+    Indexing runs in the background (a large corpus can take hours); this
+    returns immediately. Poll index_status for progress and, once finished,
+    the last-run summary (added/updated/removed/unchanged/empty/errors).
+
     Args:
         full: If True, rebuild entire index. Default False (incremental).
 
     Returns:
-        Summary with counts of added, updated, removed, unchanged, and errors.
+        Whether a run was started, or a note that one is already in progress.
     """
-    indexer = get_indexer()
-    if full:
-        summary = indexer.index_full()
-    else:
-        summary = indexer.index_incremental()
-    return asdict(summary)
+    started = get_indexer().start_reindex(full=full)
+    if started:
+        return {
+            "started": True,
+            "message": f"{'Full' if full else 'Incremental'} indexing started "
+            "in the background. Poll index_status for progress.",
+        }
+    return {
+        "started": False,
+        "message": "An indexing run is already in progress. "
+        "Poll index_status for progress.",
+    }
 
 
 @mcp.tool
